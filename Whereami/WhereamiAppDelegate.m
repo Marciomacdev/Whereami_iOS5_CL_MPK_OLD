@@ -7,13 +7,26 @@
 //
 
 #import "WhereamiAppDelegate.h"
+#import "MapPoint.h"
 
 @implementation WhereamiAppDelegate
 
-@synthesize window = _window;
+@synthesize window = _window, mapView, manager, locationTitleField, activityIndicator;
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
+    
+    manager = [[CLLocationManager alloc] init];
+    
+    [manager setDelegate: self];
+    [manager setDesiredAccuracy:kCLLocationAccuracyBest];
+    [manager setDistanceFilter:kCLDistanceFilterNone];
+    
+    // [manager startUpdatingLocation]; // Start thread.
+    
+    [mapView setShowsUserLocation:YES]; // used by MKMapView
+    
+    
     // Override point for customization after application launch.
     [self.window makeKeyAndVisible];
     return YES;
@@ -58,8 +71,87 @@
      */
 }
 
+-(void)findLocation {
+    
+    [manager startUpdatingLocation];
+    [activityIndicator startAnimating];
+    [locationTitleField setHidden: YES];
+
+}
+
+-(void)foundLocation {
+    
+    [locationTitleField setText:@""];
+    [activityIndicator stopAnimating];
+    [locationTitleField setHidden: NO];
+    [manager stopUpdatingLocation];
+    
+}
+
+
+#pragma mark --
+#pragma mark CoreLocation Delegate Methods
+
+- (void)locationManager:(CLLocationManager *)manager
+	didUpdateToLocation:(CLLocation *)newLocation
+           fromLocation:(CLLocation *)oldLocation {
+    
+    NSLog(@"Location: %@", newLocation);
+    
+    NSTimeInterval t = [[newLocation timestamp]timeIntervalSinceNow];
+    if (t < -180) {
+        return;
+    }
+    MapPoint *mapPoint = [[MapPoint alloc] initWithCoordinate:[newLocation coordinate] title:[locationTitleField text]];
+    [mapView addAnnotation: mapPoint];
+    
+    [mapPoint release];
+    
+    [self foundLocation];
+    
+}
+
+- (void)locationManager:(CLLocationManager *)manager
+       didFailWithError:(NSError *)error {
+    
+    NSLog(@"Could not find location => %@", [error description]);
+    
+}
+
+#pragma mark --
+#pragma mark MKMapViewDelegate Methods
+- (void)mapView:(MKMapView *)mv didAddAnnotationViews:(NSArray *)views {
+    
+    MKAnnotationView *annotationView = [views objectAtIndex:0];
+    id <MKAnnotation> mp = [annotationView annotation];
+    
+    MKCoordinateRegion region = MKCoordinateRegionMakeWithDistance([mp coordinate], 250, 250);
+    
+    [mv setRegion:region animated:YES];
+}
+
+#pragma mark -
+#pragma mark TextField Delegate Methods
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+    
+    if ([[textField text] isEqualToString:@""]) {
+        return NO;
+    }
+    
+    [self findLocation];
+    [textField resignFirstResponder];
+    
+    return YES;    
+}
+
+
+
 - (void)dealloc
 {
+    [manager setDelegate:nil];
+    [mapView release];
+    [locationTitleField release];
+    [activityIndicator release];
     [_window release];
     [super dealloc];
 }
